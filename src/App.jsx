@@ -1,101 +1,108 @@
 import React, { useState, useEffect } from 'react';
 import { CameraModule } from './components/CameraModule';
 import { DataAssuranceCard } from './components/DataAssuranceCard';
+import { ComplianceManager } from './components/ComplianceManager';
 import { useOfflineQueue } from './hooks/useOfflineQueue';
 import { stitchApi } from './services/stitchApi';
-import { Wifi, WifiOff, Database } from 'lucide-react';
+import { Wifi, WifiOff, Database, LayoutDashboard, Camera } from 'lucide-react';
 import './styles/theme.css';
 
 function App() {
+  const [view, setView] = useState('capture'); // 'capture' | 'compliance'
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [capturedImage, setCapturedImage] = useState(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const { queue, addToQueue, removeFromQueue } = useOfflineQueue();
+  const [capturedData, setCapturedData] = useState(null);
+  const { queue, addToQueue, isSyncing } = useOfflineQueue();
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    const handleStatusChange = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', handleStatusChange);
+    window.addEventListener('offline', handleStatusChange);
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleStatusChange);
+      window.removeEventListener('offline', handleStatusChange);
     };
   }, []);
 
-  const handleCapture = (base64) => {
-    setCapturedImage(base64);
+  const handleCapture = (evidence) => {
+    setCapturedData(evidence);
   };
 
   const handleConfirm = async () => {
-    if (!capturedImage) return;
+    if (!capturedData) return;
     
-    setIsSyncing(true);
     try {
       if (isOnline) {
-        await stitchApi.submitData(capturedImage, "FARMER_001");
-        alert("數據同步成功！");
+        await stitchApi.submitData(capturedData);
       } else {
-        addToQueue(capturedImage);
-        alert("離線存檔成功，待網路恢復後自動同步。");
+        addToQueue(capturedData);
       }
-      setCapturedImage(null);
+      setCapturedData(null);
     } catch (err) {
-      addToQueue(capturedImage);
-      alert("同步失敗，已轉入離線隊列。");
-    } finally {
-      setIsSyncing(false);
+      addToQueue(capturedData);
+      setCapturedData(null);
     }
   };
 
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col p-4">
-      <header className="py-6 border-b-4 border-agric-neon mb-6">
-        <h1 className="text-4xl font-black tracking-tighter neon-glow">
-          ANTIGRAVITY<br/>
-          <span className="text-lg bg-agric-neon text-agric-black px-2 py-0.5 uppercase">Stitch Terminal</span>
-        </h1>
-        <div className="mt-4 flex justify-between text-xs">
+      {/* 全域系統導航 */}
+      <nav className="flex border-b-2 border-agric-neon mb-6">
+        <button 
+          onClick={() => setView('capture')}
+          className={`flex-1 py-4 flex items-center justify-center gap-2 font-black uppercase tracking-widest ${view === 'capture' ? 'bg-agric-neon text-agric-black' : 'text-agric-neon opacity-50'}`}
+        >
+          <Camera size={20} /> 採集端
+        </button>
+        <button 
+          onClick={() => setView('compliance')}
+          className={`flex-1 py-4 flex items-center justify-center gap-2 font-black uppercase tracking-widest ${view === 'compliance' ? 'bg-agric-neon text-agric-black' : 'text-agric-neon opacity-50'}`}
+        >
+          <LayoutDashboard size={20} /> 管理端
+        </button>
+      </nav>
+
+      {/* 系統狀態條 */}
+      <header className="mb-6">
+        <div className="flex justify-between items-center text-[10px] font-mono">
           <div className="flex items-center gap-2">
-            {isOnline ? <Wifi size={14} /> : <WifiOff size={14} className="text-red-500" />}
-            <span>{isOnline ? "在線模式" : "離線韌性模式"}</span>
+            {isOnline ? (
+              <span className="flex items-center gap-1 text-agric-neon"><Wifi size={12} /> SYSTEM_ONLINE</span>
+            ) : (
+              <span className="flex items-center gap-1 text-red-500 animate-pulse"><WifiOff size={12} /> OFFLINE_RETRY_MODE</span>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <Database size={14} />
-            <span>隊列: {queue.length}</span>
+          <div className="flex items-center gap-2 text-agric-neon">
+            <Database size={12} /> 待同步隊列: {queue.length}
           </div>
         </div>
       </header>
 
+      {/* 視圖切換區域 */}
       <main className="flex-grow">
-        {!capturedImage ? (
-          <CameraModule onCapture={handleCapture} />
-        ) : (
-          <div className="space-y-4">
-            <div className="border-4 border-agric-neon aspect-square overflow-hidden">
-              <img src={capturedImage} className="w-full h-full object-cover grayscale" />
-            </div>
-            <DataAssuranceCard 
-              data={{ 
-                material_name: "台肥43號有機肥", 
-                usage_amount: 5, 
-                original_unit: "包",
-                hash: "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8" 
-              }} 
-              onConfirm={handleConfirm} 
-            />
-            <button 
-              onClick={() => setCapturedImage(null)}
-              className="w-full py-4 text-agric-neon opacity-60 underline"
-            >
-              重新拍攝
-            </button>
+        {view === 'capture' ? (
+          <div className="space-y-6">
+            {!capturedData ? (
+              <CameraModule onCapture={handleCapture} />
+            ) : (
+              <DataAssuranceCard 
+                data={capturedData} 
+                onConfirm={handleConfirm} 
+              />
+            )}
           </div>
+        ) : (
+          <ComplianceManager />
         )}
       </main>
 
-      <footer className="mt-8 py-4 border-t border-agric-neon/20 text-[10px] opacity-40 uppercase tracking-widest">
-        SYSTEM DECOUPLED ARCHITECTURE V1.0 // 2026 ANTIGRAVITY
+      {/* 頁腳：系統資訊 */}
+      <footer className="mt-8 py-6 border-t border-agric-neon/20 flex flex-col items-center gap-2">
+        <h1 className="text-xl font-black neon-glow tracking-tighter uppercase">Antigravity STITCH Layer</h1>
+        <div className="text-[8px] opacity-30 text-center uppercase tracking-widest leading-loose">
+          Secure Multi-Agent Infrastructure<br/>
+          Decoupled ESG Evidence Engine v1.5<br/>
+          © 2026 AGRIC AI SYSTEMS
+        </div>
       </footer>
     </div>
   );
