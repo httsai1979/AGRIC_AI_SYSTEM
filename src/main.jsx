@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import liff from '@line/liff'
-import './index.css'
+import './styles/theme.css'
 
 // --- LIFF 初始化系統（Production-Grade）---
 const initLiff = async () => {
