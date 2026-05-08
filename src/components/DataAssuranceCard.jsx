@@ -5,89 +5,55 @@ import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-mo
 /**
  * DataAssuranceCard - ESG 確信與利益誘幫轉譯終端
  */
-export const DataAssuranceCard = ({ data, onConfirm }) => {
+export const DataAssuranceCard = ({ data, onConfirm, onRetake }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [isOfflineMode, setIsOfflineMode] = useState(false);
-  const [isManualMode, setIsManualMode] = useState(data.confidence_score < 0.8);
+  const [isManualMode, setIsManualMode] = useState(data.confidence_score >= 0.5 && data.confidence_score <= 0.9);
   const [manualData, setManualData] = useState({ ...data });
 
-  // --- 1. 利益誘因實時算法 ---
-  const weight = (manualData.usage_amount || 0) * 20; 
-  const carbonSaving = (weight * 0.5).toFixed(1);
-  const estimatedSubsidy = (weight * 10).toLocaleString();
-
-  const x = useMotionValue(0);
-  const trackWidth = 220;
-  const bgColor = useTransform(x, [0, trackWidth], ["#1A1A1A", "#00FF00"]);
-
-  const handleDragEnd = (_, info) => {
-    if (info.offset.x >= trackWidth * 0.8) {
-      executeCommit();
+  // --- AI 信心值邏輯門實作 ---
+  useEffect(() => {
+    if (data.confidence_score < 0.5) {
+      // 觸發重拍流程
+      const speak = () => {
+        const msg = new SpeechSynthesisUtterance("阿伯，照片太反光了，幫我重拍一張好嗎？");
+        msg.lang = "zh-TW";
+        window.speechSynthesis.speak(msg);
+      };
+      speak();
+      onRetake();
     }
-  };
+  }, [data.confidence_score]);
 
-  const executeCommit = async () => {
+  const triggerConfirm = async () => {
     setIsSyncing(true);
-    
-    const playSuccessVoice = () => {
-      const utterance = new SpeechSynthesisUtterance("阿伯記錄成功了，補助金已經幫你記在帳本囉！");
-      utterance.lang = "zh-TW";
-      window.speechSynthesis.speak(utterance);
-    };
-
     try {
       await onConfirm(manualData);
-      
-      setTimeout(() => {
-        setIsSyncing(false);
-        setIsSuccess(true);
-        playSuccessVoice();
-      }, 1500);
+      setIsSuccess(true);
     } catch (err) {
-      // 觸發錯誤回退 (Offline Fallback UI)
+      console.error("Sync failed");
+    } finally {
       setIsSyncing(false);
-      setIsOfflineMode(true);
-      console.warn("[SYSTEM_FALLBACK] GAS API unavailable. Switching to local safety mode.");
     }
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-      className="high-contrast-card relative overflow-hidden p-6 border-4 border-agric-neon"
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="high-contrast-card relative overflow-hidden p-6 border-4 border-agric-neon">
       <AnimatePresence>
-        {isOfflineMode && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-            className="absolute inset-0 z-[60] bg-agric-black flex flex-col items-center justify-center p-8 text-center"
-          >
-            <div className="text-yellow-500 mb-6">
-              <ShieldAlert size={80} className="mx-auto animate-pulse" />
+        {isManualMode && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6 p-4 bg-yellow-600/30 border-2 border-yellow-500">
+            <h3 className="text-yellow-500 font-bold mb-2 flex items-center gap-2 text-sm">
+               🔍 數據信心偏低 ({data.confidence_score})，請確認品項
+            </h3>
+            <div className="grid gap-3">
+              <input 
+                type="text" 
+                value={manualData.material_name} 
+                onChange={(e) => setManualData({...manualData, material_name: e.target.value})}
+                className="bg-agric-black border border-agric-neon p-3 text-lg font-black text-agric-neon outline-none"
+              />
             </div>
-            <h2 className="text-2xl font-black text-yellow-500 mb-4 uppercase">離線安全模式啟動</h2>
-            <p className="text-sm leading-relaxed mb-8">
-              📦 紀錄已由 <span className="text-agric-neon">Antigravity 安全層</span> 鎖定，待伺服器恢復後自動同步。
-            </p>
-            <button 
-              onClick={() => setIsOfflineMode(false)}
-              className="w-full h-20 bg-yellow-500 text-black font-black uppercase shadow-[0_0_20px_rgba(255,255,0,0.4)]"
-            >
-              我知道了
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-        {isSyncing && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-agric-neon z-50 flex flex-col items-center justify-center text-agric-black"
-          >
-            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
-              <CheckCircle2 size={64} />
-            </motion.div>
-            <span className="text-2xl font-black mt-4 uppercase">數據入鏈中...</span>
+            <button onClick={() => setIsManualMode(false)} className="mt-4 w-full bg-yellow-500 text-black p-3 font-black uppercase">修正完畢</button>
           </motion.div>
         )}
       </AnimatePresence>

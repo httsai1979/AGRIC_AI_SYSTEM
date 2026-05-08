@@ -1,36 +1,17 @@
 /**
- * ANTIGRAVITY STITCH - API Service Layer (Secured)
- * 實作密碼學數位簽章與地理圍欄驗證 (Geofencing)
+ * ANTIGRAVITY STITCH - API Service Layer (Security Hardened)
+ * 實作密碼學級別的 HMAC-SHA256 數位簽章
  */
 
 const GAS_URL = import.meta.env.VITE_GAS_URL;
-const HMAC_SECRET = import.meta.env.VITE_LINE_CHANNEL_SECRET || "AGRIC_SECRET_KEY";
-
-// 契作農地中心點 (範例座標：雲林縣口湖鄉)
-const FARM_LOCATION = { lat: 23.5822, lng: 120.1561 };
+const INTEGRITY_SECRET = import.meta.env.VITE_INTEGRITY_SECRET || "AGRIC_STITCH_SECURE_KEY";
 
 /**
- * 哈弗辛公式 (Haversine Formula) 計算地理距離 (公尺)
+ * 使用 Web Crypto API 生成 HMAC-SHA256 簽章
  */
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371e3; // 地球半徑
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2-lat1) * Math.PI/180;
-  const Δλ = (lon2-lon1) * Math.PI/180;
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-          Math.cos(φ1) * Math.cos(φ2) *
-          Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-};
-
-/**
- * HMAC-SHA256 數位簽章實作 (Web Crypto API)
- */
-const generateHMAC = async (message) => {
+const generateSignature = async (message) => {
   const encoder = new TextEncoder();
-  const keyData = encoder.encode(HMAC_SECRET);
+  const keyData = encoder.encode(INTEGRITY_SECRET);
   const key = await crypto.subtle.importKey(
     "raw", keyData,
     { name: "HMAC", hash: "SHA-256" },
@@ -41,19 +22,16 @@ const generateHMAC = async (message) => {
 };
 
 export const stitchApi = {
+  /**
+   * 提交數據並附加防竄改數位簽章
+   */
   submitData: async (captureData, farmerUid = "FARMER_001") => {
     const logId = `LOG-${Date.now()}`;
     const logDate = new Date().toISOString();
     
-    // 1. 地理圍欄驗證 (Geofencing)
-    const [lat, lng] = (captureData.coords || "0,0").split(',').map(Number);
-    const distance = calculateDistance(lat, lng, FARM_LOCATION.lat, FARM_LOCATION.lng);
-    const isOutRange = distance > 1000; // 超出 1 公里
-
-    // 2. 生成密碼學數位簽章 (Integrity)
-    // 簽章對象：{PayloadId + GPS + Timestamp}
-    const signatureStr = `${logId}|${captureData.coords}|${logDate}`;
-    const hmacSignature = await generateHMAC(signatureStr);
+    // 1. 構建待簽章字串：{PayloadID + GPS + Timestamp + imageHash}
+    const signatureMessage = `${logId}|${captureData.coords}|${logDate}|${captureData.hash}`;
+    const digitalSignature = await generateSignature(signatureMessage);
 
     const payload = {
       log_id: logId,
@@ -65,19 +43,14 @@ export const stitchApi = {
       usage_amount: captureData.usage_amount,
       original_unit: captureData.original_unit || "包",
       image: captureData.image,
-      voice_blob: captureData.voice_blob || null,
       coordinates: captureData.coords,
-      integrity_hash: captureData.hash,
-      blockchain_tx_id: hmacSignature, // 寫入 Q 欄，作為數位證跡
-      geofence_risk: isOutRange ? "LOCATION_MISMATCH" : "NONE",
-      distance_meters: distance.toFixed(0),
-      auth_token: await generateHMAC(`AUTH|${farmerUid}|${logId}`)
+      integrity_hash: captureData.hash, // 影像指紋
+      digital_signature: digitalSignature, // 數位簽章 (對應 Q 欄 blockchain_tx_id)
+      client_metadata: JSON.stringify({
+        browser: navigator.userAgent,
+        timestamp: logDate
+      })
     };
-
-    // 彈出地理警告 (若超出範圍)
-    if (isOutRange) {
-      alert(`⚠️ 警告：目前位置距離產地約 ${(distance/1000).toFixed(1)}km，座標超出契作範圍，請確認是否於產地操作？`);
-    }
 
     const formBody = new URLSearchParams();
     Object.keys(payload).forEach(key => formBody.append(key, payload[key]));
@@ -90,10 +63,20 @@ export const stitchApi = {
         body: formBody.toString()
       });
 
-      return { success: true, logId, signature: hmacSignature };
+      return { success: true, logId, signature: digitalSignature };
     } catch (err) {
-      console.error("[SECURE_STITCH] Sync error", err);
+      console.error("[SECURE_STITCH] Integrity submission failed", err);
       throw err;
     }
+  },
+
+  /**
+   * 簽章校驗邏輯 (用於隊列上傳前二次檢查)
+   */
+  verifyIntegrity: async (task) => {
+    const { log_id, coordinates, log_date, integrity_hash, digital_signature } = task;
+    const expectedMessage = `${log_id}|${coordinates}|${log_date}|${integrity_hash}`;
+    const expectedSignature = await generateSignature(expectedMessage);
+    return expectedSignature === digital_signature;
   }
 };

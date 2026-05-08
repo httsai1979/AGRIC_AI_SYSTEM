@@ -4,22 +4,25 @@ import { DataAssuranceCard } from './components/DataAssuranceCard';
 import { ComplianceManager } from './components/ComplianceManager';
 import { useOfflineQueue } from './hooks/useOfflineQueue';
 import { stitchApi } from './services/stitchApi';
-import { Wifi, WifiOff, Database, LayoutDashboard, Camera } from 'lucide-react';
+import { User, ShieldCheck, ShoppingCart, Wifi, Database } from 'lucide-react';
 import './styles/theme.css';
 
+/**
+ * App - ANTIGRAVITY 多角色狀態機中心
+ */
 function App() {
-  const [view, setView] = useState('capture'); // 'capture' | 'compliance'
+  const [systemRole, setSystemRole] = useState('FARMER'); // FARMER | BUYER | AUDITOR
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [capturedData, setCapturedData] = useState(null);
-  const { queue, addToQueue, isSyncing } = useOfflineQueue();
+  const { queue, addToQueue } = useOfflineQueue();
 
   useEffect(() => {
-    const handleStatusChange = () => setIsOnline(navigator.onLine);
-    window.addEventListener('online', handleStatusChange);
-    window.addEventListener('offline', handleStatusChange);
+    const handleStatus = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', handleStatus);
+    window.addEventListener('offline', handleStatus);
     return () => {
-      window.removeEventListener('online', handleStatusChange);
-      window.removeEventListener('offline', handleStatusChange);
+      window.removeEventListener('online', handleStatus);
+      window.removeEventListener('offline', handleStatus);
     };
   }, []);
 
@@ -27,82 +30,68 @@ function App() {
     setCapturedData(evidence);
   };
 
-  const handleConfirm = async () => {
-    if (!capturedData) return;
+  const handleConfirm = async (manualData) => {
+    const finalData = { ...capturedData, ...manualData, tenant_id: systemRole };
     
     try {
       if (isOnline) {
-        await stitchApi.submitData(capturedData);
+        await stitchApi.submitData(finalData);
       } else {
-        addToQueue(capturedData);
+        addToQueue(finalData);
       }
       setCapturedData(null);
     } catch (err) {
-      addToQueue(capturedData);
+      addToQueue(finalData);
       setCapturedData(null);
     }
   };
 
   return (
-    <div className="max-w-md mx-auto min-h-screen flex flex-col p-4">
-      {/* 全域系統導航 */}
-      <nav className="flex border-b-2 border-agric-neon mb-6">
-        <button 
-          onClick={() => setView('capture')}
-          className={`flex-1 py-4 flex items-center justify-center gap-2 font-black uppercase tracking-widest ${view === 'capture' ? 'bg-agric-neon text-agric-black' : 'text-agric-neon opacity-50'}`}
-        >
-          <Camera size={20} /> 採集端
+    <div className="max-w-md mx-auto min-h-screen flex flex-col bg-agric-black p-4">
+      {/* 1. 角色切換器 (Dev/Demo Only) */}
+      <nav className="flex bg-agric-gray border-2 border-agric-neon mb-6">
+        <button onClick={() => setSystemRole('FARMER')} className={`flex-1 py-3 flex flex-col items-center gap-1 ${systemRole === 'FARMER' ? 'bg-agric-neon text-black' : 'text-agric-neon opacity-40'}`}>
+          <User size={18} /><span className="text-[8px] font-black uppercase">農民</span>
         </button>
-        <button 
-          onClick={() => setView('compliance')}
-          className={`flex-1 py-4 flex items-center justify-center gap-2 font-black uppercase tracking-widest ${view === 'compliance' ? 'bg-agric-neon text-agric-black' : 'text-agric-neon opacity-50'}`}
-        >
-          <LayoutDashboard size={20} /> 管理端
+        <button onClick={() => setSystemRole('BUYER')} className={`flex-1 py-3 flex flex-col items-center gap-1 ${systemRole === 'BUYER' ? 'bg-agric-neon text-black' : 'text-agric-neon opacity-40'}`}>
+          <ShoppingCart size={18} /><span className="text-[8px] font-black uppercase">採購</span>
+        </button>
+        <button onClick={() => setSystemRole('AUDITOR')} className={`flex-1 py-3 flex flex-col items-center gap-1 ${systemRole === 'AUDITOR' ? 'bg-agric-neon text-black' : 'text-agric-neon opacity-40'}`}>
+          <ShieldCheck size={18} /><span className="text-[8px] font-black uppercase">稽核</span>
         </button>
       </nav>
 
-      {/* 系統狀態條 */}
-      <header className="mb-6">
-        <div className="flex justify-between items-center text-[10px] font-mono">
-          <div className="flex items-center gap-2">
-            {isOnline ? (
-              <span className="flex items-center gap-1 text-agric-neon"><Wifi size={12} /> SYSTEM_ONLINE</span>
-            ) : (
-              <span className="flex items-center gap-1 text-red-500 animate-pulse"><WifiOff size={12} /> OFFLINE_RETRY_MODE</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 text-agric-neon">
-            <Database size={12} /> 待同步隊列: {queue.length}
-          </div>
+      {/* 2. 系統狀態條 */}
+      <header className="flex justify-between items-center mb-6 px-2">
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-agric-neon shadow-[0_0_8px_#0F0]' : 'bg-red-600 animate-pulse'}`} />
+          <span className="text-[10px] font-mono uppercase tracking-widest">{isOnline ? 'Network_Secure' : 'Offline_Safe'}</span>
+        </div>
+        <div className="flex items-center gap-2 text-agric-neon text-[10px] font-mono">
+          <Database size={12} /> 隊列: {queue.length}
         </div>
       </header>
 
-      {/* 視圖切換區域 */}
+      {/* 3. 角色功能鎖定邏輯 */}
       <main className="flex-grow">
-        {view === 'capture' ? (
+        {systemRole === 'FARMER' && (
           <div className="space-y-6">
             {!capturedData ? (
               <CameraModule onCapture={handleCapture} />
             ) : (
-              <DataAssuranceCard 
-                data={capturedData} 
-                onConfirm={handleConfirm} 
-              />
+              <DataAssuranceCard data={capturedData} onConfirm={handleConfirm} />
             )}
           </div>
-        ) : (
-          <ComplianceManager />
+        )}
+
+        {(systemRole === 'BUYER' || systemRole === 'AUDITOR') && (
+          <ComplianceManager mode={systemRole} />
         )}
       </main>
 
-      {/* 頁腳：系統資訊 */}
-      <footer className="mt-8 py-6 border-t border-agric-neon/20 flex flex-col items-center gap-2">
-        <h1 className="text-xl font-black neon-glow tracking-tighter uppercase">Antigravity STITCH Layer</h1>
-        <div className="text-[8px] opacity-30 text-center uppercase tracking-widest leading-loose">
-          Secure Multi-Agent Infrastructure<br/>
-          Decoupled ESG Evidence Engine v1.5<br/>
-          © 2026 AGRIC AI SYSTEMS
-        </div>
+      <footer className="mt-8 py-8 border-t border-agric-neon/20 text-center">
+         <h1 className="text-xl font-black neon-glow tracking-tighter italic">ANTIGRAVITY STITCH</h1>
+         <p className="text-[8px] opacity-30 mt-2 uppercase tracking-[0.3em]">Decoupled Architecture // GRI & SDG Framework</p>
       </footer>
     </div>
   );
