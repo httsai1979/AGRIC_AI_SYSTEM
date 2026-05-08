@@ -1,0 +1,17 @@
+# 忽略所有套件資料夾 (這是 15,000 個改動的來源)
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# 忽略環境變數檔 (保護您的金鑰)
+.env
+.env.local
+.env.*.local
+
+# 忽略編譯與快取檔
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
