@@ -1,4 +1,4 @@
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyqqeI7T9qwpV4C9RfNVLoK7Wz4vwCoAuyUwmZ8jSo9jTAySAIC5VCRdoao1iLjwDq9/exec";
+const GAS_URL = import.meta.env.VITE_GAS_URL;
 
 const generateIntegrityHash = async (base64) => {
   const msgUint8 = new TextEncoder().encode(base64);
@@ -21,15 +21,19 @@ const getGeolocation = () => {
 };
 
 export const stitchApi = {
-  submitData: async (imagePayload, userId) => {
+  submitData: async (imagePayload, farmerUid) => {
     const coords = await getGeolocation();
     const hash = await generateIntegrityHash(imagePayload);
-    const payloadId = `AG-${Date.now()}`;
+    const logId = `LOG-${Date.now()}`;
+    const logDate = new Date().toISOString();
 
     const payload = {
-      payload_id: payloadId,
-      user_id: userId,
+      log_id: logId,              // Aligned with SCHEMA.md
+      log_date: logDate,          // Aligned with SCHEMA.md
+      farmer_uid: farmerUid,      // Aligned with SCHEMA.md
+      batch_number: "PENDING",    // Default value for Raw_Inputs
       image: imagePayload,
+      coordinates: `${coords.lat}, ${coords.lng}`, // Aligned with SCHEMA.md column L
       client_metadata: {
         browser: navigator.userAgent,
         geolocation: coords
@@ -44,6 +48,7 @@ export const stitchApi = {
       body: JSON.stringify(payload)
     });
 
-    return { success: true, payloadId };
+    return { success: true, logId };
   }
 };
+
