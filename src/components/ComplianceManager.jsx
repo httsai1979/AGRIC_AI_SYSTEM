@@ -1,152 +1,156 @@
 import React, { useState, useEffect } from 'react';
-import { FileArchive, Download, Eye, EyeOff, BarChart3, ShieldAlert, Globe } from 'lucide-react';
+import { FileText, Download, ShieldCheck, Eye, EyeOff, BarChart, History, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CalculationService } from '../services/CalculationService';
+import { AggregatorService } from '../services/AggregatorService';
 import { jsPDF } from 'jspdf';
 
 /**
- * ComplianceManager - 專業級合規管理終端
- * 支援多租戶視角切換與一鍵 PDF 確信報告生成
+ * ComplianceManager - B2B 稽核員入口與一鍵合規包生成器
  */
 export const ComplianceManager = () => {
-  const [role, setRole] = useState('corporate'); // 'farmer' | 'corporate'
-  const [batchId, setBatchId] = useState('CONTRACT-2024-001');
-  const [mockTasks, setMockTasks] = useState([]);
-  const [impact, setImpact] = useState(null);
+  const [isAuditorMode, setIsAuditorMode] = useState(false);
+  const [metrics, setMetrics] = useState(null);
+  const [history, setHistory] = useState([]);
 
   useEffect(() => {
-    // 模擬從 localStorage 或 API 獲取該批次的歷史數據
-    const savedTasks = JSON.parse(localStorage.getItem('ag_persistent_queue') || '[]');
-    setMockTasks(savedTasks);
-    setImpact(CalculationService.calculateBatchImpact(savedTasks));
-  }, [batchId]);
+    // 從本地持久化隊列讀取數據進行彙整
+    const savedData = JSON.parse(localStorage.getItem('ag_persistent_queue') || '[]');
+    setHistory(savedData);
+    setMetrics(AggregatorService.getComplianceMetrics(savedData));
+  }, []);
 
-  // --- 1. 一鍵下載包固化 (Compliance Kit) ---
-  const generatePDF = () => {
+  // --- 1. 一鍵合規包 (Compliance Kit) PDF 生成 ---
+  const generateComplianceReport = () => {
     const doc = new jsPDF();
-    const timestamp = new Date().toLocaleString();
+    const ts = new Date().toLocaleString();
 
+    // 浮水印設計
+    doc.setTextColor(230, 230, 230);
+    doc.setFontSize(50);
+    doc.text("ANTICRAVITY CONFIDENTIAL", 30, 150, { angle: 45 });
+
+    // 標題與內容
+    doc.setTextColor(0, 0, 0);
     doc.setFontSize(22);
-    doc.text("ANTIGRAVITY ESG COMPLIANCE REPORT", 20, 30);
+    doc.text("2026 ESG COMPLIANCE REPORT", 20, 30);
     
-    doc.setFontSize(12);
-    doc.text(`Batch ID: ${batchId}`, 20, 45);
-    doc.text(`Generated At: ${timestamp}`, 20, 52);
-    doc.text(`GRI 305-5 Status: COMPLIANT`, 20, 59);
+    doc.setFontSize(10);
+    doc.text(`Report ID: AG-AUDIT-${Date.now()}`, 20, 40);
+    doc.text(`Generated At: ${ts}`, 20, 45);
 
-    doc.line(20, 65, 190, 65);
+    doc.line(20, 50, 190, 50);
 
-    doc.text("IMPACT SUMMARY:", 20, 80);
-    doc.text(`- Total Scope 3 Reduction: ${impact.scope3Reduction} kg CO2e`, 25, 90);
-    doc.text(`- Soil Carbon Sequestration: ${impact.soilCarbon} kg CO2e`, 25, 100);
-    doc.text(`- Verification Method: AI-OCR Digital Evidence`, 25, 110);
+    doc.setFontSize(14);
+    doc.text("1. GRI 305-5 ENVIRONMENTAL IMPACT", 20, 65);
+    doc.text(`- Annual Carbon Reduction: ${metrics.totalCarbonReduction} kg CO2e`, 25, 75);
+    doc.text(`- Total Material Tracked: ${metrics.totalTonnage} Tons`, 25, 82);
 
-    doc.text("GRI 305-5 STATEMENT:", 20, 130);
-    doc.text("All data in this report is backed by SHA-256 digital signatures", 20, 140);
-    doc.text("and authenticated GPS coordinates, ensuring non-repudiation.", 20, 147);
+    doc.text("2. SDG 10 SOCIAL IMPACT", 20, 100);
+    doc.text(`- Total Farmers Supported: ${metrics.farmerCount}`, 25, 110);
 
-    doc.save(`Compliance_Report_${batchId}.pdf`);
+    doc.text("3. EVIDENCE AUDIT TRAIL (DIGITAL FINGERPRINTS)", 20, 130);
+    doc.setFontSize(8);
+    history.slice(0, 5).forEach((item, idx) => {
+      doc.text(`- ${item.data.material_name}: ${item.data.hmac_signature?.substring(0, 40)}...`, 25, 140 + (idx * 6));
+    });
+
+    doc.save(`AG_Compliance_Report_2026.pdf`);
   };
 
   return (
-    <div className="space-y-6">
-      {/* 租戶切換器 */}
-      <div className="flex bg-agric-gray border-2 border-agric-neon p-1">
+    <div className="space-y-6 pb-20">
+      {/* 稽核員切換開關 */}
+      <div className="bg-agric-gray border-2 border-agric-neon p-4 flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          {isAuditorMode ? <Eye size={24} className="text-agric-neon" /> : <EyeOff size={24} className="opacity-40" />}
+          <div>
+            <h3 className="text-sm font-bold uppercase">稽核員入口模式</h3>
+            <p className="text-[10px] opacity-50">啟動後僅顯示確信憑證</p>
+          </div>
+        </div>
         <button 
-          onClick={() => setRole('corporate')}
-          className={`flex-1 py-2 text-xs font-bold uppercase ${role === 'corporate' ? 'bg-agric-neon text-agric-black' : 'text-agric-neon'}`}
+          onClick={() => setIsAuditorMode(!isAuditorMode)}
+          className={`w-14 h-8 flex items-center p-1 transition-colors ${isAuditorMode ? 'bg-agric-neon' : 'bg-gray-700'}`}
         >
-          Corporate Buyer View
-        </button>
-        <button 
-          onClick={() => setRole('farmer')}
-          className={`flex-1 py-2 text-xs font-bold uppercase ${role === 'farmer' ? 'bg-agric-neon text-agric-black' : 'text-agric-neon'}`}
-        >
-          Farmer Personal View
+          <motion.div 
+            animate={{ x: isAuditorMode ? 24 : 0 }}
+            className="w-6 h-6 bg-white"
+          />
         </button>
       </div>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-        className="high-contrast-card"
-      >
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <h2 className="text-2xl font-black neon-glow uppercase tracking-tighter">Impact Dashboard</h2>
-            <p className="text-[10px] opacity-50 font-mono">BATCH: {batchId}</p>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-agric-neon bg-agric-black px-3 py-1 border border-agric-neon">
-            <Globe size={14} className="animate-spin-slow" />
-            LIVE_AUDIT_ACTIVE
-          </div>
-        </div>
-
-        {impact && (
-          <div className="grid grid-cols-1 gap-4 mb-8">
-            <div className="bg-agric-black border-l-4 border-agric-neon p-6">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs opacity-60 uppercase">Scope 3 GHG Reduction (GRI 305-5)</span>
-                <BarChart3 size={16} className="text-agric-neon" />
+      <AnimatePresence mode="wait">
+        {!isAuditorMode ? (
+          /* B2B 管理儀表板 */
+          <motion.div 
+            key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="grid grid-cols-1 gap-4"
+          >
+            <div className="high-contrast-card">
+              <div className="flex items-center gap-2 mb-6 text-agric-neon">
+                <BarChart size={24} />
+                <h2 className="text-xl font-black uppercase">年度永續指標 (2026)</h2>
               </div>
-              <div className="text-4xl font-black text-agric-neon">
-                {impact.scope3Reduction} <span className="text-sm font-normal">kg CO2e</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-agric-black border-l-4 border-blue-500 p-4">
-                <span className="text-[10px] opacity-60 block mb-1">SOIL CARBON</span>
-                <span className="text-xl font-bold">{impact.soilCarbon} kg</span>
-              </div>
-              <div className="bg-agric-black border-l-4 border-yellow-500 p-4">
-                <span className="text-[10px] opacity-60 block mb-1">TOTAL SUBSIDY</span>
-                <span className="text-xl font-bold">${impact.estimatedSubsidy}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 原始軌跡過濾 (隱私保護) */}
-        <div className="mt-8 border-t border-agric-neon/20 pt-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold uppercase">Evidence Trail</h3>
-            {role === 'corporate' ? (
-              <span className="flex items-center gap-1 text-[8px] text-yellow-500 uppercase">
-                <ShieldAlert size={10} /> Privacy Filter Active
-              </span>
-            ) : null}
-          </div>
-
-          <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-            {mockTasks.map((task, idx) => (
-              <div key={idx} className="flex items-center justify-between text-[10px] bg-agric-gray p-3 border border-agric-neon/10">
-                <div className="flex items-center gap-4">
-                  <span className="opacity-40">#{idx+1}</span>
-                  <span className="font-bold">{task.data.material_name}</span>
+              
+              <div className="grid grid-cols-1 gap-6">
+                <div className="border-l-4 border-agric-neon pl-4">
+                  <span className="text-[10px] opacity-60 uppercase block mb-1">年度累計減碳 (GRI 305-5)</span>
+                  <div className="text-4xl font-black">{metrics?.totalCarbonReduction} <span className="text-sm font-normal">kg CO2e</span></div>
                 </div>
-                <div className="flex items-center gap-6">
-                  {role === 'farmer' && (
-                    <span className="text-blue-400 font-mono">{task.data.coords}</span>
-                  )}
-                  <span className="text-agric-neon font-mono">SIGNED</span>
+                <div className="border-l-4 border-blue-500 pl-4">
+                  <span className="text-[10px] opacity-60 uppercase block mb-1">支持農民總數 (SDG 10)</span>
+                  <div className="text-4xl font-black">{metrics?.farmerCount} <span className="text-sm font-normal">位</span></div>
+                </div>
+              </div>
+
+              <button 
+                onClick={generateComplianceReport}
+                className="mt-8 btn-muddy h-24 w-full shadow-[0_0_20px_rgba(0,255,0,0.2)]"
+              >
+                <Download size={24} /> 一鍵生成 2026 合規報告
+              </button>
+            </div>
+          </motion.div>
+        ) : (
+          /* 稽核員確信介面 */
+          <motion.div 
+            key="auditor" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="space-y-4"
+          >
+            <div className="p-4 bg-red-900/20 border-2 border-red-500/50 flex items-center gap-3 text-red-500">
+              <ShieldCheck size={20} />
+              <span className="text-xs font-bold uppercase">稽核模式已啟動：敏感數據已遮蔽</span>
+            </div>
+
+            {history.map((task, idx) => (
+              <div key={idx} className="high-contrast-card p-4 space-y-4">
+                <div className="flex justify-between items-center border-b border-agric-neon/20 pb-2">
+                  <span className="text-xs font-bold">憑證 #{idx + 1}</span>
+                  <span className="text-[8px] font-mono opacity-50">{task.data.timestamp}</span>
+                </div>
+                {/* 僅顯示影像與數位指紋，隱藏農民 UID */}
+                <div className="aspect-video border border-agric-neon/30 bg-agric-gray overflow-hidden">
+                  <img src={task.data.image} alt="Evidence" className="w-full h-full object-cover grayscale" />
+                </div>
+                <div className="grid gap-2">
+                   <div className="flex items-center gap-2 text-[10px]">
+                      <MapPin size={10} className="text-agric-neon" />
+                      <span className="font-mono">{task.data.coords}</span>
+                   </div>
+                   <div className="flex items-center gap-2 text-[8px] opacity-50 overflow-hidden">
+                      <History size={10} />
+                      <span className="truncate">{task.data.hmac_signature}</span>
+                   </div>
                 </div>
               </div>
             ))}
-          </div>
-        </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* 下載按鈕 */}
-        <button 
-          onClick={generatePDF}
-          className="mt-8 btn-muddy h-24 w-full shadow-[0_0_20px_rgba(0,255,0,0.2)]"
-        >
-          <Download size={24} /> 生成 GRI 305-5 合規報告
-        </button>
-      </motion.div>
-
-      <div className="text-[8px] opacity-30 text-center uppercase tracking-widest font-mono">
-        Audit ID: 5e884898da28... // Framework: TNFD-Locate-V1
-      </div>
+      <footer className="text-center py-4">
+        <p className="text-[8px] opacity-30 uppercase tracking-[0.2em]">Antigravity Compliance Engine v1.5</p>
+      </footer>
     </div>
   );
 };

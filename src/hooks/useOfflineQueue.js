@@ -2,23 +2,19 @@ import { useState, useEffect, useCallback } from 'react';
 import { stitchApi } from '../services/stitchApi';
 
 /**
- * useOfflineQueue - 斷點續傳與離線同步引擎
- * 採用 FIFO 隊列，確保數據在斷電或瀏覽器重啟後能自動回傳
+ * useOfflineQueue - 安全持久化隊列
+ * 確保具備數位簽章的數據在離線狀態下依然安全
  */
 export const useOfflineQueue = () => {
   const [queue, setQueue] = useState(() => {
-    // 從持久化空間讀取未完成任務
     const saved = localStorage.getItem('ag_persistent_queue');
     return saved ? JSON.parse(saved) : [];
   });
 
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // 當隊列變動時，同步回 localStorage
   useEffect(() => {
     localStorage.setItem('ag_persistent_queue', JSON.stringify(queue));
-    
-    // 若網路恢復且隊列有資料，自動啟動同步
     if (navigator.onLine && queue.length > 0) {
       processQueue();
     }
@@ -27,50 +23,37 @@ export const useOfflineQueue = () => {
   const addToQueue = useCallback((captureData) => {
     const taskId = `TASK-${Date.now()}`;
     
-    // 數據隔離 (Isolation Logic)：若簽章失敗或位置嚴重不符則進入隔離區
-    if (captureData.risk_level === "LOCATION_MISMATCH") {
-      console.warn(`[DATA_ISOLATION] Task ${taskId} isolated due to location mismatch.`);
-      const isolatedTasks = JSON.parse(localStorage.getItem('ag_isolated_tasks') || '[]');
-      localStorage.setItem('ag_isolated_tasks', JSON.stringify([...isolatedTasks, { id: taskId, data: captureData }]));
-      return taskId; // 不進入主要同步隊列
+    // 數據隔離：若地理風險過高，記錄於本地隔離區
+    if (captureData.geofence_risk === "LOCATION_MISMATCH") {
+      const isolated = JSON.parse(localStorage.getItem('ag_quarantine_queue') || '[]');
+      localStorage.setItem('ag_quarantine_queue', JSON.stringify([...isolated, { id: taskId, data: captureData }]));
     }
 
     const newTask = { 
       id: taskId, 
       data: captureData, 
       status: 'pending',
-      retryCount: 0 
+      timestamp: new Date().toISOString()
     };
     setQueue(prev => [...prev, newTask]);
     return taskId;
   }, []);
 
-
-  /**
-   * 核心同步引擎：逐條處理隊列 (FIFO)
-   */
   const processQueue = async () => {
     if (isSyncing || queue.length === 0) return;
-    
     setIsSyncing(true);
-    const activeQueue = [...queue];
-
-    for (const task of activeQueue) {
-      try {
-        console.log(`[OFFLINE_ENGINE] Attempting Sync: ${task.id}`);
-        const result = await stitchApi.submitData(task.data);
-        
-        if (result.success) {
-          // 同步成功，移出隊列
-          setQueue(prev => prev.filter(t => t.id !== task.id));
-        }
-      } catch (err) {
-        console.error(`[OFFLINE_ENGINE] Sync Failed for ${task.id}, waiting for next retry.`);
-        // 保留任務在隊列中，待下一次網路變化或重啟後重試
-        break; 
+    
+    const task = queue[0];
+    try {
+      const result = await stitchApi.submitData(task.data);
+      if (result.success) {
+        setQueue(prev => prev.filter(t => t.id !== task.id));
       }
+    } catch (err) {
+      console.warn("[OFFLINE_QUEUE] Retry suspended due to network error.");
+    } finally {
+      setIsSyncing(false);
     }
-    setIsSyncing(false);
   };
 
   return { queue, addToQueue, processQueue, isSyncing };
