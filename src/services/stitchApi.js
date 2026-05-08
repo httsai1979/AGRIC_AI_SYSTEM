@@ -45,7 +45,7 @@ export const stitchApi = {
       image: captureData.image,
       coordinates: captureData.coords,
       integrity_hash: captureData.hash, // 影像指紋
-      digital_signature: digitalSignature, // 數位簽章 (對應 Q 欄 blockchain_tx_id)
+      blockchain_tx_id: digitalSignature, // 直接對齊 SCHEMA.md 的 Q 欄
       client_metadata: JSON.stringify({
         browser: navigator.userAgent,
         timestamp: logDate
