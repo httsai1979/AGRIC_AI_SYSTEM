@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-agric-black text-agric-neon font-mono;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .btn-muddy {
+    @apply min-h-muddy w-full border-4 border-agric-neon bg-transparent 
+           text-2xl font-bold flex items-center justify-center gap-4
+           active:bg-agric-neon active:text-agric-black transition-colors;
+  }
+
+  .high-contrast-card {
+    @apply border-2 border-agric-neon bg-agric-gray p-6 rounded-none;
+  }
+
+  .neon-glow {
+    text-shadow: 0 0 10px rgba(0, 255, 0, 0.7);
+  }
+}
