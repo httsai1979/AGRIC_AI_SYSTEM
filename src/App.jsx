@@ -7,16 +7,29 @@ import { stitchApi } from './services/stitchApi';
 import { User, ShieldCheck, ShoppingCart, Wifi, Database } from 'lucide-react';
 import './styles/theme.css';
 
+import liff from '@line/liff';
+
 /**
  * App - ANTIGRAVITY 多角色狀態機中心
  */
 function App() {
-  const [systemRole, setSystemRole] = useState('FARMER'); // FARMER | BUYER | AUDITOR
+  const [systemRole, setSystemRole] = useState('FARMER'); 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [capturedData, setCapturedData] = useState(null);
+  const [userProfile, setUserProfile] = useState({ displayName: '阿伯 (測試員)', userId: 'TEST_USER_001' });
   const { queue, addToQueue } = useOfflineQueue();
 
   useEffect(() => {
+    // --- 1. LIFF 身分鎖定機制 ---
+    const fetchProfile = async () => {
+      if (liff.isLoggedIn()) {
+        const profile = await liff.getProfile();
+        setUserProfile(profile);
+        console.log('[LIFF] Identity Locked:', profile.userId);
+      }
+    };
+    fetchProfile();
+
     const handleStatus = () => setIsOnline(navigator.onLine);
     window.addEventListener('online', handleStatus);
     window.addEventListener('offline', handleStatus);
@@ -31,7 +44,14 @@ function App() {
   };
 
   const handleConfirm = async (manualData) => {
-    const finalData = { ...capturedData, ...manualData, tenant_id: systemRole };
+    // 注入 LIFF 身分與角色標籤
+    const finalData = { 
+      ...capturedData, 
+      ...manualData, 
+      farmer_uid: userProfile.userId,
+      tenant_id: systemRole 
+    };
+
     
     try {
       if (isOnline) {
@@ -48,6 +68,14 @@ function App() {
 
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col bg-agric-black p-4">
+      {/* LINE 身分歡迎語 */}
+      {systemRole === 'FARMER' && (
+        <div className="bg-agric-neon/10 border-l-4 border-agric-neon p-3 mb-6">
+          <p className="text-[10px] font-bold text-agric-neon uppercase tracking-tighter">
+            🟢 阿伯 {userProfile.displayName} 您好，系統已與您的產銷履歷帳號連線
+          </p>
+        </div>
+      )}
       {/* 1. 角色切換器 (Dev/Demo Only) */}
       <nav className="flex bg-agric-gray border-2 border-agric-neon mb-6">
         <button onClick={() => setSystemRole('FARMER')} className={`flex-1 py-3 flex flex-col items-center gap-1 ${systemRole === 'FARMER' ? 'bg-agric-neon text-black' : 'text-agric-neon opacity-40'}`}>
@@ -79,7 +107,11 @@ function App() {
             {!capturedData ? (
               <CameraModule onCapture={handleCapture} />
             ) : (
-              <DataAssuranceCard data={capturedData} onConfirm={handleConfirm} />
+              <DataAssuranceCard 
+                data={capturedData} 
+                onConfirm={handleConfirm} 
+                onRetake={() => setCapturedData(null)} 
+              />
             )}
           </div>
         )}

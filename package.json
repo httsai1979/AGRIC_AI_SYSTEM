@@ -11,6 +11,7 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "@line/liff": "^2.23.2",
     "lucide-react": "^0.263.1",
     "framer-motion": "^10.16.4",
     "tesseract.js": "^4.1.1",

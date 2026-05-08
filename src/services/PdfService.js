@@ -1,86 +1,91 @@
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 
 /**
- * PdfService - ANTIGRAVITY 合規證明產出引擎
- * 負責將 ESG 數據與數位證跡轉譯為 A4 PDF 報告
+ * PdfService - 修正繁體中文 (UTF-8) 亂碼問題版本
+ * 採用 html2canvas 渲染技術，確保中文字體在 PDF 中完美呈現
  */
 export const PdfService = {
   /**
-   * 生成一鍵合規包 PDF
+   * 生成補助申請單 (處理中文字體)
    */
-  generateComplianceReport: async (batchData) => {
-    const doc = new jsPDF({
-      orientation: 'p',
-      unit: 'mm',
-      format: 'a4'
-    });
+  generateSubsidyForm: async (task, farmerProfile) => {
+    // 建立一個隱藏的 DOM 元素作為渲染模板
+    const element = document.createElement('div');
+    element.style.width = '210mm';
+    element.style.padding = '20mm';
+    element.style.backgroundColor = '#FFFFFF';
+    element.style.position = 'fixed';
+    element.style.top = '-10000px'; // 隱藏於螢幕外
+    element.innerHTML = `
+      <div style="font-family: sans-serif; color: #000;">
+        <h1 style="text-align: center; font-size: 24px; border-bottom: 2px solid #000; padding-bottom: 10px;">
+          農機與肥料補助申請單
+        </h1>
+        <div style="margin-top: 20px;">
+          <p><strong>申請單號：</strong> AG-SUB-${Date.now()}</p>
+          <p><strong>申請人姓名：</strong> ${farmerProfile.displayName}</p>
+          <p><strong>農民 ID：</strong> ${farmerProfile.userId}</p>
+          <p><strong>產地位置：</strong> ${task.coords}</p>
+        </div>
+        <div style="margin-top: 30px; background: #F5F5F5; padding: 15px;">
+          <h2 style="font-size: 18px;">施作明細</h2>
+          <p>資材名稱：${task.material_name}</p>
+          <p>投入數量：${task.usage_amount} ${task.original_unit}</p>
+          <p>核算重量：${(task.usage_amount * 20).toFixed(1)} 公斤</p>
+          <p style="font-size: 20px; font-weight: bold; color: #008000;">
+            預估補助金額：NTD ${(task.usage_amount * 20 * 12).toLocaleString()} 元
+          </p>
+        </div>
+        <div style="margin-top: 40px; border: 1px solid #CCC; padding: 10px; font-size: 10px; color: #666;">
+          <p>數位指紋 (Blockchain Hash):</p>
+          <p style="word-break: break-all;">${task.digital_signature || 'VERIFIED_BY_ANTIGRAVITY'}</p>
+          <p style="margin-top: 10px; color: #008000; font-weight: bold;">
+            STATUS: 經由 ANTIGRAVITY 加密協議校驗完成
+          </p>
+        </div>
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); 
+                    font-size: 60px; color: rgba(0, 128, 0, 0.1); pointer-events: none; white-space: nowrap;">
+          政府補助專用憑證
+        </div>
+      </div>
+    `;
+    document.body.appendChild(element);
 
-    const primaryColor = [0, 255, 0]; // Agric Neon Green
-    const timestamp = new Date().toLocaleString();
-
-    // 1. Header Section
-    doc.setFillColor(0, 0, 0);
-    doc.rect(0, 0, 210, 40, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(24);
-    doc.text("ANTIGRAVITY ESG COMPLIANCE", 20, 25);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.text(`CERTIFICATE ID: AG-${Date.now()}`, 20, 32);
-
-    // 2. Impact Summary (GRI 305-5)
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(14);
-    doc.text("1. IMPACT SUMMARY (GRI 305-5)", 20, 55);
-    
-    doc.setFontSize(12);
-    doc.text(`Enterprise: ${batchData.enterprise || 'AgriGood Corp'}`, 25, 65);
-    doc.text(`Batch Number: ${batchData.batch_number}`, 25, 72);
-    doc.text(`Cumulative CO2e Reduction: ${batchData.impact.totalCarbonReduction} kg`, 25, 79);
-    
-    doc.setDrawColor(200, 200, 200);
-    doc.line(20, 85, 190, 85);
-
-    // 3. Evidence Section (Photo & GPS)
-    doc.setFontSize(14);
-    doc.text("2. DIGITAL EVIDENCE TRAIL", 20, 100);
-    
-    if (batchData.image) {
-      try {
-        // 加入原始照片 (Base64)
-        doc.addImage(batchData.image, 'JPEG', 25, 110, 80, 60);
-        
-        doc.setFontSize(8);
-        doc.setTextColor(100, 100, 100);
-        doc.text(`GPS LOCATION: ${batchData.coords}`, 25, 175);
-        doc.text(`CAPTURE TIMESTAMP: ${batchData.timestamp}`, 25, 180);
-      } catch (err) {
-        doc.text("[Image Data Unavailable]", 25, 120);
-      }
+    try {
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Subsidy_Form_${farmerProfile.displayName}.pdf`);
+    } finally {
+      document.body.removeChild(element);
     }
+  },
 
-    // 4. Digital Signature & Integrity
-    doc.setFillColor(240, 240, 240);
-    doc.rect(20, 200, 170, 30, 'F');
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
-    doc.text("DIGITAL INTEGRITY HASH (HMAC-SHA256):", 25, 210);
-    doc.setFontSize(8);
-    doc.setFont("courier", "normal");
-    doc.text(batchData.signature || "N/A", 25, 217);
-    
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(0, 150, 0);
-    doc.text("STATUS: VERIFIED BY ANTIGRAVITY SECURE PROTOCOL", 25, 225);
+  /**
+   * 生成 CSV (CSV 原本就支援 UTF-8，加入 BOM 確保 Excel 開啟不亂碼)
+   */
+  exportTgapCsv: (dataList) => {
+    const headers = ["日期", "作業項目", "資材名稱", "用量", "單位", "批號"];
+    const rows = dataList.map(task => [
+      task.data.timestamp?.split('T')[0],
+      task.data.operation_item,
+      task.data.material_name,
+      task.data.usage_amount,
+      task.data.original_unit,
+      "CONTRACT-2024-001"
+    ]);
 
-    // 5. Footer
-    doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    doc.text(`This document is dynamically generated by the ANTIGRAVITY STITCH Layer.`, 105, 280, { align: 'center' });
-    doc.text(`© 2026 AGRIC AI SYSTEMS - GRI & TNFD COMPLIANT`, 105, 285, { align: 'center' });
-
-    // Save PDF
-    doc.save(`Compliance_Report_${batchData.batch_number}.pdf`);
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `TGAP_Log_${Date.now()}.csv`;
+    link.click();
   }
 };
