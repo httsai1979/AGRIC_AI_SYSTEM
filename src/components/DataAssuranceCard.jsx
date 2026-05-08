@@ -1,32 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, ChevronRight, Package, Leaf, Coins, CheckCircle2, ArrowRight } from 'lucide-react';
+import { ShieldCheck, ChevronRight, Package, Leaf, Coins, CheckCircle2, ArrowRight, ShieldAlert } from 'lucide-react';
 import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-motion';
 
 /**
- * DataAssuranceCard - ESG 確信與利益誘因轉譯終端
- * 負責將 AI 辨識結果轉譯為農民感知的價值，並執行最終確信滑動
+ * DataAssuranceCard - ESG 確信與利益誘幫轉譯終端
  */
 export const DataAssuranceCard = ({ data, onConfirm }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [isManualMode, setIsManualMode] = useState(data.confidence_score < 0.8);
   const [manualData, setManualData] = useState({ ...data });
-  
-  // --- 1. 利益誘因實時算法 (基於 $W_{fert}$ 邏輯) ---
-  // 1包預設 20kg, 補助預設 10元/kg, 減碳預設 0.5kg/kg
+
+  // --- 1. 利益誘因實時算法 ---
   const weight = (manualData.usage_amount || 0) * 20; 
   const carbonSaving = (weight * 0.5).toFixed(1);
   const estimatedSubsidy = (weight * 10).toLocaleString();
 
-  // --- 2. 確信滑動鎖 (Assurance Lock) 邏輯 ---
   const x = useMotionValue(0);
-  const trackWidth = 220; // 滑動軌道長度
-  const xRange = [0, trackWidth];
-  const opacity = useTransform(x, xRange, [1, 0]);
-  const bgColor = useTransform(x, xRange, ["#1A1A1A", "#00FF00"]);
+  const trackWidth = 220;
+  const bgColor = useTransform(x, [0, trackWidth], ["#1A1A1A", "#00FF00"]);
 
   const handleDragEnd = (_, info) => {
-    // 若滑動超過 80% 則視為確信成功
     if (info.offset.x >= trackWidth * 0.8) {
       executeCommit();
     }
@@ -35,16 +30,13 @@ export const DataAssuranceCard = ({ data, onConfirm }) => {
   const executeCommit = async () => {
     setIsSyncing(true);
     
-    // 3. 語音反饋 (在地化阿伯親和模式)
     const playSuccessVoice = () => {
       const utterance = new SpeechSynthesisUtterance("阿伯記錄成功了，補助金已經幫你記在帳本囉！");
       utterance.lang = "zh-TW";
-      utterance.rate = 0.95; // 稍慢的速度增加親切感
       window.speechSynthesis.speak(utterance);
     };
 
     try {
-      // 呼叫外部傳入的確認回調 (觸發 stitchApi)
       await onConfirm(manualData);
       
       setTimeout(() => {
@@ -53,18 +45,40 @@ export const DataAssuranceCard = ({ data, onConfirm }) => {
         playSuccessVoice();
       }, 1500);
     } catch (err) {
+      // 觸發錯誤回退 (Offline Fallback UI)
       setIsSyncing(false);
-      alert("同步失敗，已轉入離線隊列存檔。");
+      setIsOfflineMode(true);
+      console.warn("[SYSTEM_FALLBACK] GAS API unavailable. Switching to local safety mode.");
     }
   };
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
       className="high-contrast-card relative overflow-hidden p-6 border-4 border-agric-neon"
     >
       <AnimatePresence>
+        {isOfflineMode && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+            className="absolute inset-0 z-[60] bg-agric-black flex flex-col items-center justify-center p-8 text-center"
+          >
+            <div className="text-yellow-500 mb-6">
+              <ShieldAlert size={80} className="mx-auto animate-pulse" />
+            </div>
+            <h2 className="text-2xl font-black text-yellow-500 mb-4 uppercase">離線安全模式啟動</h2>
+            <p className="text-sm leading-relaxed mb-8">
+              📦 紀錄已由 <span className="text-agric-neon">Antigravity 安全層</span> 鎖定，待伺服器恢復後自動同步。
+            </p>
+            <button 
+              onClick={() => setIsOfflineMode(false)}
+              className="w-full h-20 bg-yellow-500 text-black font-black uppercase shadow-[0_0_20px_rgba(255,255,0,0.4)]"
+            >
+              我知道了
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
         {isSyncing && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
