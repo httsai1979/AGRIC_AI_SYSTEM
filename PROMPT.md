@@ -33,15 +33,16 @@
 請務必嚴格依循以下結構輸出：
 {
   "status": "success" | "fallback",
+  "confidence_score": "number (0.0 - 1.0, 根據影像清晰度與文字比對率給分)",
   "data": {
-    "material_name": "字串 (從影像 OCR 提取的肥料或資材名稱，若無則為 null)",
-    "operation_item": "字串 (如：施肥，若無則為 null)",
-    "usage_amount": "數值 (提取的原始數字，若無則為 null)",
-    "original_unit": "字串 (包 / 桶 / 分 / 坪 / 甲 / 元，若無則為 null)",
-    "converted_weight_kg": "數值 (依公式換算後的公斤數，若無法換算則為 null)",
-    "converted_area_ha": "數值 (依公式換算後的公頃數，若無法換算則為 null)"
+    "material_name": "字串 (OCR 提取的資材名稱)",
+    "npk_ratio": "字串 (例如：15-15-15，若無則為 null)",
+    "operation_item": "字串 (施肥 / 除草 / 採收)",
+    "usage_amount": "數值 (原始數字)",
+    "original_unit": "字串 (包 / 桶 / 元)",
+    "converted_weight_kg": "數值 (換算後的公斤數)"
   },
-  "fallback_message": "字串 (當 status 為 fallback 時，以親切接地氣的台語口吻回覆，例如：『阿伯，照片有點模糊喔，可以請您重拍一次肥料袋正面的標籤嗎？』或『阿伯，您剛剛沒說用到幾包喔，可以再按一次麥克風跟我說嗎？』。若 status 為 success，此欄位必須為 null)"
+  "fallback_message": "字串 (當 confidence_score < 0.8 或 status 為 fallback 時，引導農民重新拍攝或進入手動校準模式)"
 }
 💡 指令設計重點解析：
 強制輸出純 JSON：在 GAS 端點對接中，最常發生的錯誤是 AI 夾帶了「好的，這就為您輸出...」的冗餘文字。此指令已透過「禁止輸出任何 Markdown 標記與前後語」確保 JSON.parse() 不會報錯 3。

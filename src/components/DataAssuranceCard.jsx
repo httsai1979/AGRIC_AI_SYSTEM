@@ -9,10 +9,12 @@ import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-mo
 export const DataAssuranceCard = ({ data, onConfirm }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isManualMode, setIsManualMode] = useState(data.confidence_score < 0.8);
+  const [manualData, setManualData] = useState({ ...data });
   
   // --- 1. 利益誘因實時算法 (基於 $W_{fert}$ 邏輯) ---
   // 1包預設 20kg, 補助預設 10元/kg, 減碳預設 0.5kg/kg
-  const weight = (data.usage_amount || 0) * 20; 
+  const weight = (manualData.usage_amount || 0) * 20; 
   const carbonSaving = (weight * 0.5).toFixed(1);
   const estimatedSubsidy = (weight * 10).toLocaleString();
 
@@ -43,7 +45,7 @@ export const DataAssuranceCard = ({ data, onConfirm }) => {
 
     try {
       // 呼叫外部傳入的確認回調 (觸發 stitchApi)
-      await onConfirm();
+      await onConfirm(manualData);
       
       setTimeout(() => {
         setIsSyncing(false);

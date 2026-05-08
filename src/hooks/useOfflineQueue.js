@@ -26,6 +26,15 @@ export const useOfflineQueue = () => {
 
   const addToQueue = useCallback((captureData) => {
     const taskId = `TASK-${Date.now()}`;
+    
+    // 數據隔離 (Isolation Logic)：若簽章失敗或位置嚴重不符則進入隔離區
+    if (captureData.risk_level === "LOCATION_MISMATCH") {
+      console.warn(`[DATA_ISOLATION] Task ${taskId} isolated due to location mismatch.`);
+      const isolatedTasks = JSON.parse(localStorage.getItem('ag_isolated_tasks') || '[]');
+      localStorage.setItem('ag_isolated_tasks', JSON.stringify([...isolatedTasks, { id: taskId, data: captureData }]));
+      return taskId; // 不進入主要同步隊列
+    }
+
     const newTask = { 
       id: taskId, 
       data: captureData, 
@@ -35,6 +44,7 @@ export const useOfflineQueue = () => {
     setQueue(prev => [...prev, newTask]);
     return taskId;
   }, []);
+
 
   /**
    * 核心同步引擎：逐條處理隊列 (FIFO)
